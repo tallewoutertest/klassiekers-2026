@@ -1,114 +1,55 @@
 #!/usr/bin/env python3
 """
 Scraper voor voorjaarsklassiekers 2026 startlijsten.
-Gebruikt Playwright (headless browser) om data op te halen van ProCyclingStats.
+Gebruikt de procyclingstats Python library voor betrouwbare data extractie.
 """
 
-from playwright.sync_api import sync_playwright
+from procyclingstats import RaceStartlist
 import json
-import re
 from datetime import datetime
 import os
 import time
 
 # Configuratie koersen (gesorteerd op datum) - Correcte datums 2026
 RACES = [
-    {'id': 'omloop', 'url': 'https://www.procyclingstats.com/race/omloop-het-nieuwsblad/2026/startlist', 'name': 'Omloop Het Nieuwsblad', 'date': '2026-02-28', 'monument': False},
-    {'id': 'kbk', 'url': 'https://www.procyclingstats.com/race/kuurne-brussel-kuurne/2026/startlist', 'name': 'Kuurne-Brussel-Kuurne', 'date': '2026-03-01', 'monument': False},
-    {'id': 'strade', 'url': 'https://www.procyclingstats.com/race/strade-bianche/2026/startlist', 'name': 'Strade Bianche', 'date': '2026-03-07', 'monument': False},
-    {'id': 'sanremo', 'url': 'https://www.procyclingstats.com/race/milano-sanremo/2026/startlist', 'name': 'Milano-Sanremo', 'date': '2026-03-21', 'monument': True},
-    {'id': 'brugge', 'url': 'https://www.procyclingstats.com/race/classic-brugge-de-panne/2026/startlist', 'name': 'The Great Sprint Classic', 'date': '2026-03-25', 'monument': False},
-    {'id': 'e3', 'url': 'https://www.procyclingstats.com/race/e3-harelbeke/2026/startlist', 'name': 'E3 Saxo Classic', 'date': '2026-03-27', 'monument': False},
-    {'id': 'gw', 'url': 'https://www.procyclingstats.com/race/gent-wevelgem/2026/startlist', 'name': 'Gent-Wevelgem', 'date': '2026-03-29', 'monument': False},
-    {'id': 'ddv', 'url': 'https://www.procyclingstats.com/race/dwars-door-vlaanderen/2026/startlist', 'name': 'Dwars door Vlaanderen', 'date': '2026-04-01', 'monument': False},
-    {'id': 'rvv', 'url': 'https://www.procyclingstats.com/race/ronde-van-vlaanderen/2026/startlist', 'name': 'Ronde van Vlaanderen', 'date': '2026-04-05', 'monument': True},
-    {'id': 'schelde', 'url': 'https://www.procyclingstats.com/race/scheldeprijs/2026/startlist', 'name': 'Scheldeprijs', 'date': '2026-04-08', 'monument': False},
-    {'id': 'roubaix', 'url': 'https://www.procyclingstats.com/race/paris-roubaix/2026/startlist', 'name': 'Paris-Roubaix', 'date': '2026-04-12', 'monument': True},
-    {'id': 'brabantse', 'url': 'https://www.procyclingstats.com/race/brabantse-pijl/2026/startlist', 'name': 'Brabantse Pijl', 'date': '2026-04-17', 'monument': False},
-    {'id': 'amstel', 'url': 'https://www.procyclingstats.com/race/amstel-gold-race/2026/startlist', 'name': 'Amstel Gold Race', 'date': '2026-04-19', 'monument': False},
-    {'id': 'fleche', 'url': 'https://www.procyclingstats.com/race/la-fleche-wallonne/2026/startlist', 'name': 'La Flèche Wallonne', 'date': '2026-04-22', 'monument': False},
-    {'id': 'lbl', 'url': 'https://www.procyclingstats.com/race/liege-bastogne-liege/2026/startlist', 'name': 'Liège-Bastogne-Liège', 'date': '2026-04-26', 'monument': True},
+    {'id': 'omloop', 'path': 'race/omloop-het-nieuwsblad/2026/startlist', 'name': 'Omloop Het Nieuwsblad', 'date': '2026-02-28', 'monument': False},
+    {'id': 'kbk', 'path': 'race/kuurne-brussel-kuurne/2026/startlist', 'name': 'Kuurne-Brussel-Kuurne', 'date': '2026-03-01', 'monument': False},
+    {'id': 'strade', 'path': 'race/strade-bianche/2026/startlist', 'name': 'Strade Bianche', 'date': '2026-03-07', 'monument': False},
+    {'id': 'sanremo', 'path': 'race/milano-sanremo/2026/startlist', 'name': 'Milano-Sanremo', 'date': '2026-03-21', 'monument': True},
+    {'id': 'brugge', 'path': 'race/classic-brugge-de-panne/2026/startlist', 'name': 'The Great Sprint Classic', 'date': '2026-03-25', 'monument': False},
+    {'id': 'e3', 'path': 'race/e3-harelbeke/2026/startlist', 'name': 'E3 Saxo Classic', 'date': '2026-03-27', 'monument': False},
+    {'id': 'gw', 'path': 'race/gent-wevelgem/2026/startlist', 'name': 'Gent-Wevelgem', 'date': '2026-03-29', 'monument': False},
+    {'id': 'ddv', 'path': 'race/dwars-door-vlaanderen/2026/startlist', 'name': 'Dwars door Vlaanderen', 'date': '2026-04-01', 'monument': False},
+    {'id': 'rvv', 'path': 'race/ronde-van-vlaanderen/2026/startlist', 'name': 'Ronde van Vlaanderen', 'date': '2026-04-05', 'monument': True},
+    {'id': 'schelde', 'path': 'race/scheldeprijs/2026/startlist', 'name': 'Scheldeprijs', 'date': '2026-04-08', 'monument': False},
+    {'id': 'roubaix', 'path': 'race/paris-roubaix/2026/startlist', 'name': 'Paris-Roubaix', 'date': '2026-04-12', 'monument': True},
+    {'id': 'brabantse', 'path': 'race/brabantse-pijl/2026/startlist', 'name': 'Brabantse Pijl', 'date': '2026-04-17', 'monument': False},
+    {'id': 'amstel', 'path': 'race/amstel-gold-race/2026/startlist', 'name': 'Amstel Gold Race', 'date': '2026-04-19', 'monument': False},
+    {'id': 'fleche', 'path': 'race/la-fleche-wallonne/2026/startlist', 'name': 'La Flèche Wallonne', 'date': '2026-04-22', 'monument': False},
+    {'id': 'lbl', 'path': 'race/liege-bastogne-liege/2026/startlist', 'name': 'Liège-Bastogne-Liège', 'date': '2026-04-26', 'monument': True},
 ]
 
-def normalize_rider_name(name):
-    """Normalize rider name for consistent matching."""
-    # Remove time indicators like "1h", "21h", etc.
-    name = re.sub(r'\d+[hm]$', '', name).strip()
-    # Remove asterisks and other markers
-    name = re.sub(r'\*', '', name).strip()
-    return name
-
-def fetch_startlist(page, race):
-    """Fetch and parse a startlist from ProCyclingStats using Playwright."""
-    url = race['url']
-
+def fetch_startlist(race):
+    """Fetch and parse a startlist from ProCyclingStats using the procyclingstats library."""
     try:
         print(f"  Fetching {race['name']}...")
 
-        # Navigate to page
-        page.goto(url, wait_until='networkidle', timeout=60000)
+        # Use the procyclingstats library
+        startlist = RaceStartlist(race['path'])
+        riders_data = startlist.startlist()
 
-        # Wait a bit for dynamic content
-        time.sleep(2)
+        # Extract rider names
+        riders = []
+        for rider in riders_data:
+            name = rider.get('rider_name', '')
+            if name:
+                riders.append(name)
 
-        # Try to close cookie banner if present
-        try:
-            cookie_btn = page.locator('text="Opslaan + Sluiten"').first
-            if cookie_btn.is_visible(timeout=2000):
-                cookie_btn.click()
-                time.sleep(1)
-        except:
-            pass
+        print(f"    Found {len(riders)} riders")
+        if riders:
+            print(f"    Sample: {riders[:5]}")
 
-        # Extract rider links using JavaScript
-        riders = page.evaluate('''() => {
-            const riders = new Set();
-            const links = document.querySelectorAll('a[href*="/rider/"]');
-
-            links.forEach(link => {
-                const href = link.getAttribute('href') || '';
-                const name = link.textContent.trim();
-
-                // Skip stats/overview links
-                if (href.includes('statistics') || href.includes('overview') || href.includes('results')) {
-                    return;
-                }
-
-                // Skip if in footer
-                const footer = link.closest('footer') || link.closest('.footer');
-                if (footer) return;
-
-                // Check if it's a valid rider name (has space, starts with uppercase)
-                if (name.length > 3 && name.includes(' ') && /^[A-ZÄÖÜÉÈÀÁÍÓÚÑ]/.test(name)) {
-                    // Remove time indicators
-                    const cleanName = name.replace(/\\d+[hm]$/, '').trim();
-                    if (cleanName.length > 3) {
-                        riders.add(cleanName);
-                    }
-                }
-            });
-
-            return Array.from(riders);
-        }''')
-
-        # Filter out popular riders section (common names that appear in footer)
-        popular_riders = ['Tadej Pogačar', 'Wout van Aert', 'Remco Evenepoel', 'Jonas Vingegaard',
-                        'Mathieu van der Poel', 'Mads Pedersen', 'Isaac Del Toro', 'Paul Magnier',
-                        'Demi Vollering', 'Lotte Kopecky', 'Katarzyna Niewiadoma', 'Pauline Ferrand-Prévot']
-
-        # Only filter these if they appear at the end (likely from footer)
-        # Keep them if they're in the actual startlist
-        filtered_riders = []
-        for rider in riders:
-            # Keep all riders that look like startlist entries (LASTNAME Firstname format)
-            if rider and len(rider) > 3:
-                filtered_riders.append(rider)
-
-        print(f"    Found {len(filtered_riders)} riders")
-        if filtered_riders:
-            print(f"    Sample: {filtered_riders[:5]}")
-
-        return filtered_riders
+        return riders
 
     except Exception as e:
         print(f"    Error: {e}")
@@ -375,28 +316,16 @@ def generate_html(rider_data, races, last_update):
     return html
 
 def main():
-    print(f"=== Voorjaarsklassiekers 2026 Scraper (Playwright) ===")
+    print(f"=== Voorjaarsklassiekers 2026 Scraper ===")
     print(f"Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
-    with sync_playwright() as p:
-        # Launch browser
-        print("Launching browser...")
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            viewport={'width': 1920, 'height': 1080}
-        )
-        page = context.new_page()
-
-        # Fetch all startlists
-        races_data = {}
-        for race in RACES:
-            riders = fetch_startlist(page, race)
-            races_data[race['id']] = riders
-            time.sleep(1)  # Be nice to the server
-
-        browser.close()
+    # Fetch all startlists
+    races_data = {}
+    for race in RACES:
+        riders = fetch_startlist(race)
+        races_data[race['id']] = riders
+        time.sleep(2)  # Be nice to the server
 
     # Build rider participation data
     rider_data = build_rider_data(races_data)
