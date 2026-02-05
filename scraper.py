@@ -11,23 +11,23 @@ from datetime import datetime
 import os
 import time
 
-# Configuratie koersen (gesorteerd op datum)
+# Configuratie koersen (gesorteerd op datum) - Correcte datums 2026
 RACES = [
-    {'id': 'omloop', 'url': 'https://www.procyclingstats.com/race/omloop-het-nieuwsblad/2026/startlist', 'name': 'Omloop Het Nieuwsblad', 'date': '2026-03-01', 'monument': False},
-    {'id': 'kbk', 'url': 'https://www.procyclingstats.com/race/kuurne-brussel-kuurne/2026/startlist', 'name': 'Kuurne-Brussel-Kuurne', 'date': '2026-03-02', 'monument': False},
-    {'id': 'strade', 'url': 'https://www.procyclingstats.com/race/strade-bianche/2026/startlist', 'name': 'Strade Bianche', 'date': '2026-03-08', 'monument': False},
-    {'id': 'sanremo', 'url': 'https://www.procyclingstats.com/race/milano-sanremo/2026/startlist', 'name': 'Milano-Sanremo', 'date': '2026-03-22', 'monument': True},
-    {'id': 'brugge', 'url': 'https://www.procyclingstats.com/race/classic-brugge-de-panne/2026/startlist', 'name': 'Brugge-De Panne', 'date': '2026-03-26', 'monument': False},
-    {'id': 'e3', 'url': 'https://www.procyclingstats.com/race/e3-harelbeke/2026/startlist', 'name': 'E3 Saxo Classic', 'date': '2026-03-28', 'monument': False},
-    {'id': 'gw', 'url': 'https://www.procyclingstats.com/race/gent-wevelgem/2026/startlist', 'name': 'Gent-Wevelgem', 'date': '2026-03-30', 'monument': False},
-    {'id': 'ddv', 'url': 'https://www.procyclingstats.com/race/dwars-door-vlaanderen/2026/startlist', 'name': 'Dwars door Vlaanderen', 'date': '2026-04-02', 'monument': False},
-    {'id': 'rvv', 'url': 'https://www.procyclingstats.com/race/ronde-van-vlaanderen/2026/startlist', 'name': 'Ronde van Vlaanderen', 'date': '2026-04-06', 'monument': True},
-    {'id': 'schelde', 'url': 'https://www.procyclingstats.com/race/scheldeprijs/2026/startlist', 'name': 'Scheldeprijs', 'date': '2026-04-09', 'monument': False},
-    {'id': 'roubaix', 'url': 'https://www.procyclingstats.com/race/paris-roubaix/2026/startlist', 'name': 'Paris-Roubaix', 'date': '2026-04-13', 'monument': True},
-    {'id': 'brabantse', 'url': 'https://www.procyclingstats.com/race/brabantse-pijl/2026/startlist', 'name': 'Brabantse Pijl', 'date': '2026-04-16', 'monument': False},
-    {'id': 'amstel', 'url': 'https://www.procyclingstats.com/race/amstel-gold-race/2026/startlist', 'name': 'Amstel Gold Race', 'date': '2026-04-20', 'monument': False},
-    {'id': 'fleche', 'url': 'https://www.procyclingstats.com/race/la-fleche-wallonne/2026/startlist', 'name': 'La Flèche Wallonne', 'date': '2026-04-23', 'monument': False},
-    {'id': 'lbl', 'url': 'https://www.procyclingstats.com/race/liege-bastogne-liege/2026/startlist', 'name': 'Liège-Bastogne-Liège', 'date': '2026-04-27', 'monument': True},
+    {'id': 'omloop', 'url': 'https://www.procyclingstats.com/race/omloop-het-nieuwsblad/2026/startlist', 'name': 'Omloop Het Nieuwsblad', 'date': '2026-02-28', 'monument': False},
+    {'id': 'kbk', 'url': 'https://www.procyclingstats.com/race/kuurne-brussel-kuurne/2026/startlist', 'name': 'Kuurne-Brussel-Kuurne', 'date': '2026-03-01', 'monument': False},
+    {'id': 'strade', 'url': 'https://www.procyclingstats.com/race/strade-bianche/2026/startlist', 'name': 'Strade Bianche', 'date': '2026-03-07', 'monument': False},
+    {'id': 'sanremo', 'url': 'https://www.procyclingstats.com/race/milano-sanremo/2026/startlist', 'name': 'Milano-Sanremo', 'date': '2026-03-21', 'monument': True},
+    {'id': 'brugge', 'url': 'https://www.procyclingstats.com/race/classic-brugge-de-panne/2026/startlist', 'name': 'The Great Sprint Classic', 'date': '2026-03-25', 'monument': False},
+    {'id': 'e3', 'url': 'https://www.procyclingstats.com/race/e3-harelbeke/2026/startlist', 'name': 'E3 Saxo Classic', 'date': '2026-03-27', 'monument': False},
+    {'id': 'gw', 'url': 'https://www.procyclingstats.com/race/gent-wevelgem/2026/startlist', 'name': 'Gent-Wevelgem', 'date': '2026-03-29', 'monument': False},
+    {'id': 'ddv', 'url': 'https://www.procyclingstats.com/race/dwars-door-vlaanderen/2026/startlist', 'name': 'Dwars door Vlaanderen', 'date': '2026-04-01', 'monument': False},
+    {'id': 'rvv', 'url': 'https://www.procyclingstats.com/race/ronde-van-vlaanderen/2026/startlist', 'name': 'Ronde van Vlaanderen', 'date': '2026-04-05', 'monument': True},
+    {'id': 'schelde', 'url': 'https://www.procyclingstats.com/race/scheldeprijs/2026/startlist', 'name': 'Scheldeprijs', 'date': '2026-04-08', 'monument': False},
+    {'id': 'roubaix', 'url': 'https://www.procyclingstats.com/race/paris-roubaix/2026/startlist', 'name': 'Paris-Roubaix', 'date': '2026-04-12', 'monument': True},
+    {'id': 'brabantse', 'url': 'https://www.procyclingstats.com/race/brabantse-pijl/2026/startlist', 'name': 'Brabantse Pijl', 'date': '2026-04-17', 'monument': False},
+    {'id': 'amstel', 'url': 'https://www.procyclingstats.com/race/amstel-gold-race/2026/startlist', 'name': 'Amstel Gold Race', 'date': '2026-04-19', 'monument': False},
+    {'id': 'fleche', 'url': 'https://www.procyclingstats.com/race/la-fleche-wallonne/2026/startlist', 'name': 'La Flèche Wallonne', 'date': '2026-04-22', 'monument': False},
+    {'id': 'lbl', 'url': 'https://www.procyclingstats.com/race/liege-bastogne-liege/2026/startlist', 'name': 'Liège-Bastogne-Liège', 'date': '2026-04-26', 'monument': True},
 ]
 
 def normalize_rider_name(name):
