@@ -9,7 +9,7 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     permissions:
       contents: write
@@ -23,6 +23,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium
+
       - name: Install dependencies
         run: |
           pip install playwright
@@ -31,6 +37,7 @@ jobs:
 
       - name: Run scraper
         run: python scraper.py
+        timeout-minutes: 20
 
       - name: Commit and push changes
         run: |
