@@ -10,6 +10,8 @@ import json
 import re
 from datetime import datetime
 import os
+import time
+import random
 
 # Configuratie koersen (gesorteerd op datum)
 RACES = [
@@ -30,15 +32,26 @@ RACES = [
     {'id': 'lbl', 'url': 'https://www.procyclingstats.com/race/liege-bastogne-liege/2026/startlist', 'name': 'Liège-Bastogne-Liège', 'date': '2026-04-27', 'monument': True},
 ]
 
-def get_headers():
-    """Return headers to mimic a browser request."""
-    return {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,nl;q=0.8',
+def get_session():
+    """Create a requests session with browser-like settings."""
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-    }
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+    })
+    return session
 
 def normalize_rider_name(name):
     """Normalize rider name for consistent matching."""
@@ -48,62 +61,71 @@ def normalize_rider_name(name):
     name = re.sub(r'\*', '', name).strip()
     return name
 
-def fetch_startlist(race):
+def fetch_startlist(session, race):
     """Fetch and parse a startlist from ProCyclingStats."""
     url = race['url']
     race_id = race['id']
 
     try:
         print(f"  Fetching {race['name']}...")
-        response = requests.get(url, headers=get_headers(), timeout=30)
-        response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Add random delay to avoid rate limiting
+        time.sleep(random.uniform(1, 3))
+
+        response = session.get(url, timeout=30)
+        print(f"    Status code: {response.status_code}")
+
+        if response.status_code != 200:
+            print(f"    Error: HTTP {response.status_code}")
+            return []
+
+        html_content = response.text
+        print(f"    Response length: {len(html_content)} chars")
+
+        soup = BeautifulSoup(html_content, 'html.parser')
         riders = set()
 
-        # Method 1: Find the startlist container and get all rider links
-        startlist_container = soup.find('ul', class_='startlist_v4') or soup.find('div', class_='startlist_v4')
+        # Find all links that contain /rider/ in href
+        all_links = soup.find_all('a', href=True)
+        rider_links = [a for a in all_links if '/rider/' in a.get('href', '')]
 
-        if startlist_container:
-            rider_links = startlist_container.find_all('a', href=re.compile(r'/rider/[a-z-]+$'))
-            for link in rider_links:
-                name = normalize_rider_name(link.get_text().strip())
-                if len(name) > 2 and ' ' in name:
+        print(f"    Found {len(rider_links)} rider links total")
+
+        for link in rider_links:
+            href = link.get('href', '')
+            name = link.get_text().strip()
+
+            # Skip if it's a stats/overview link
+            if any(x in href for x in ['statistics', 'overview', 'results', 'victories']):
+                continue
+
+            # Skip popular riders in footer (they have specific class patterns)
+            parent_classes = ' '.join(link.find_parent('div').get('class', []) if link.find_parent('div') else [])
+            if 'footer' in parent_classes.lower():
+                continue
+
+            # Normalize and validate name
+            name = normalize_rider_name(name)
+
+            # Valid rider names have at least 2 parts and start with uppercase
+            if len(name) > 3 and ' ' in name and name[0].isupper():
+                # Filter out common non-rider entries
+                if not any(x in name.lower() for x in ['popular', 'statistics', 'team', 'race']):
                     riders.add(name)
 
-        # Method 2: Fallback - find all rider links in the main content
-        if len(riders) < 5:
-            main_content = soup.find('div', class_='page-content') or soup.find('div', class_='main')
-            if main_content:
-                # Find team blocks
-                team_blocks = main_content.find_all('li', recursive=True)
-                for block in team_blocks:
-                    rider_links = block.find_all('a', href=re.compile(r'/rider/'))
-                    for link in rider_links:
-                        href = link.get('href', '')
-                        # Only include direct rider links, not stats pages
-                        if '/rider/' in href and not any(x in href for x in ['statistics', 'overview', 'results']):
-                            name = normalize_rider_name(link.get_text().strip())
-                            if len(name) > 2 and ' ' in name:
-                                # Filter out popular riders section (usually in footer)
-                                parent_text = str(link.find_parent('div', class_='mt20') or '')
-                                if 'Popular riders' not in parent_text:
-                                    riders.add(name)
+        print(f"    Extracted {len(riders)} unique riders")
 
-        # Method 3: More aggressive fallback
-        if len(riders) < 5:
-            all_rider_links = soup.find_all('a', href=re.compile(r'^rider/[a-z-]+$|^/rider/[a-z-]+$'))
-            for link in all_rider_links:
-                name = normalize_rider_name(link.get_text().strip())
-                # Check if it looks like a rider name (LASTNAME Firstname format)
-                if len(name) > 2 and ' ' in name and name[0].isupper():
-                    riders.add(name)
+        # Debug: print first few riders
+        if riders:
+            sample = list(riders)[:5]
+            print(f"    Sample: {sample}")
 
-        print(f"    Found {len(riders)} riders")
         return list(riders)
 
     except Exception as e:
-        print(f"    Error fetching {url}: {e}")
+        print(f"    Error: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def build_rider_data(races_data):
@@ -369,10 +391,21 @@ def main():
     print(f"Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
+    # Create session
+    session = get_session()
+
+    # First, visit the homepage to get cookies
+    print("Visiting homepage first...")
+    try:
+        session.get('https://www.procyclingstats.com/', timeout=30)
+        time.sleep(2)
+    except Exception as e:
+        print(f"Warning: Could not visit homepage: {e}")
+
     # Fetch all startlists
     races_data = {}
     for race in RACES:
-        riders = fetch_startlist(race)
+        riders = fetch_startlist(session, race)
         races_data[race['id']] = riders
 
     # Build rider participation data
@@ -382,8 +415,10 @@ def main():
     total_participations = sum(len(p) for p in rider_data.values())
 
     print()
+    print(f"=" * 40)
     print(f"Total unique riders: {total_riders}")
     print(f"Total participations: {total_participations}")
+    print(f"=" * 40)
 
     # Prepare races info for JSON
     races_info = [{'id': r['id'], 'name': r['name'], 'date': r['date'], 'monument': r['monument']} for r in RACES]
