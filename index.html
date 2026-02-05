@@ -3,33 +3,235 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voorjaarsklassiekers 2026 - Laden...</title>
+    <title>Voorjaarsklassiekers 2026 - Deelnames per Renner</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             color: #eee;
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
+            padding: 20px;
         }
-        .loading {
-            padding: 40px;
+        .container { max-width: 1800px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 10px; color: #ffd700; font-size: 2em; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 20px; font-size: 0.9em; }
+        .last-update { text-align: center; color: #666; margin-bottom: 20px; font-size: 0.8em; }
+        .filters {
+            display: flex; gap: 15px; margin-bottom: 20px;
+            flex-wrap: wrap; justify-content: center; align-items: center;
         }
-        h1 { color: #ffd700; margin-bottom: 20px; }
-        p { color: #888; }
+        .filters input, .filters select {
+            padding: 10px 15px; border: 1px solid #333; border-radius: 8px;
+            background: #1a1a2e; color: #eee; font-size: 14px;
+        }
+        .filters input:focus, .filters select:focus { outline: none; border-color: #ffd700; }
+        .stats {
+            display: flex; gap: 20px; justify-content: center;
+            margin-bottom: 20px; flex-wrap: wrap;
+        }
+        .stat-box {
+            background: rgba(255,255,255,0.05); padding: 15px 25px;
+            border-radius: 10px; text-align: center;
+        }
+        .stat-box .number { font-size: 2em; font-weight: bold; color: #ffd700; }
+        .stat-box .label { font-size: 0.8em; color: #888; }
+        .table-container {
+            overflow-x: auto; background: rgba(255,255,255,0.02);
+            border-radius: 12px; padding: 10px;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #333; }
+        th {
+            background: #1a1a2e; color: #ffd700; font-weight: 600;
+            cursor: pointer; position: sticky; top: 0; white-space: nowrap;
+        }
+        th:hover { background: #252545; }
+        th.sortable::after { content: ' ↕'; opacity: 0.3; }
+        th.sort-asc::after { content: ' ↑'; opacity: 1; }
+        th.sort-desc::after { content: ' ↓'; opacity: 1; }
+        td.rider-name {
+            text-align: left; font-weight: 500; white-space: nowrap;
+            position: sticky; left: 0; background: #16213e;
+        }
+        td.total { font-weight: bold; color: #ffd700; background: rgba(255,215,0,0.1); }
+        tr:hover { background: rgba(255,255,255,0.05); }
+        tr:hover td.rider-name { background: #1e2d4a; }
+        .check { color: #4caf50; font-weight: bold; }
+        .cross { color: #333; }
+        .race-header {
+            writing-mode: vertical-rl; text-orientation: mixed;
+            transform: rotate(180deg); max-height: 120px; font-size: 11px;
+        }
+        .race-date { font-size: 9px; color: #888; display: block; }
+        .monument { color: #ff6b6b !important; }
+        .legend {
+            display: flex; gap: 20px; justify-content: center;
+            margin-top: 20px; font-size: 0.85em; color: #888;
+        }
+        .legend span { display: flex; align-items: center; gap: 5px; }
+        @media (max-width: 768px) {
+            .race-header { font-size: 9px; max-height: 80px; }
+            th, td { padding: 6px 4px; }
+        }
     </style>
 </head>
 <body>
-    <div class="loading">
+    <div class="container">
         <h1>Voorjaarsklassiekers 2026</h1>
-        <p>Data wordt geladen...</p>
-        <p style="margin-top: 20px; font-size: 0.9em;">
-            Als je dit blijft zien, voer de GitHub Action handmatig uit:<br>
-            Actions → Update Startlijsten → Run workflow
-        </p>
+        <p class="subtitle">Overzicht deelnames wielrenners aan de belangrijkste voorjaarskoersen</p>
+        <p class="last-update">Laatste update: 05-02-2026 08:50 UTC | Bron: ProCyclingStats (voorlopige startlijsten)</p>
+
+        <div class="stats">
+            <div class="stat-box">
+                <div class="number" id="totalRiders">0</div>
+                <div class="label">Renners</div>
+            </div>
+            <div class="stat-box">
+                <div class="number">15</div>
+                <div class="label">Koersen</div>
+            </div>
+            <div class="stat-box">
+                <div class="number" id="maxParticipations">0</div>
+                <div class="label">Max deelnames</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <input type="text" id="searchInput" placeholder="Zoek renner..." onkeyup="filterTable()">
+            <select id="minRaces" onchange="filterTable()">
+                <option value="1">Min. 1 koers</option>
+                <option value="3">Min. 3 koersen</option>
+                <option value="5">Min. 5 koersen</option>
+                <option value="8">Min. 8 koersen</option>
+                <option value="10">Min. 10 koersen</option>
+            </select>
+        </div>
+
+        <div class="table-container">
+            <table id="raceTable">
+                <thead>
+                    <tr id="headerRow">
+                        <th class="sortable" onclick="sortTable(0)">Renner</th>
+                        <th class="sortable" onclick="sortTable(1)">Totaal</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <div class="legend">
+            <span><span class="check">✓</span> = Deelname</span>
+            <span><span style="color:#ff6b6b">●</span> = Monument</span>
+        </div>
     </div>
+
+    <script>
+        const races = [{"id": "omloop", "name": "Omloop Het Nieuwsblad", "date": "2026-03-01", "monument": false}, {"id": "kbk", "name": "Kuurne-Brussel-Kuurne", "date": "2026-03-02", "monument": false}, {"id": "strade", "name": "Strade Bianche", "date": "2026-03-08", "monument": false}, {"id": "sanremo", "name": "Milano-Sanremo", "date": "2026-03-22", "monument": true}, {"id": "brugge", "name": "Brugge-De Panne", "date": "2026-03-26", "monument": false}, {"id": "e3", "name": "E3 Saxo Classic", "date": "2026-03-28", "monument": false}, {"id": "gw", "name": "Gent-Wevelgem", "date": "2026-03-30", "monument": false}, {"id": "ddv", "name": "Dwars door Vlaanderen", "date": "2026-04-02", "monument": false}, {"id": "rvv", "name": "Ronde van Vlaanderen", "date": "2026-04-06", "monument": true}, {"id": "schelde", "name": "Scheldeprijs", "date": "2026-04-09", "monument": false}, {"id": "roubaix", "name": "Paris-Roubaix", "date": "2026-04-13", "monument": true}, {"id": "brabantse", "name": "Brabantse Pijl", "date": "2026-04-16", "monument": false}, {"id": "amstel", "name": "Amstel Gold Race", "date": "2026-04-20", "monument": false}, {"id": "fleche", "name": "La Flèche Wallonne", "date": "2026-04-23", "monument": false}, {"id": "lbl", "name": "Liège-Bastogne-Liège", "date": "2026-04-27", "monument": true}];
+        const riderData = {};
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            const day = date.getDate();
+            const month = date.toLocaleDateString('nl-NL', { month: 'short' });
+            return `${day} ${month}`;
+        }
+
+        function buildHeaders() {
+            const headerRow = document.getElementById('headerRow');
+            races.forEach((race, index) => {
+                const th = document.createElement('th');
+                th.className = 'sortable';
+                th.onclick = () => sortTable(index + 2);
+                th.innerHTML = `<div class="race-header ${race.monument ? 'monument' : ''}">${race.name}<span class="race-date">${formatDate(race.date)}</span></div>`;
+                headerRow.appendChild(th);
+            });
+        }
+
+        function buildTable() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            const riders = Object.entries(riderData).map(([name, participations]) => ({
+                name, participations, total: participations.length
+            })).filter(r => r.total > 0);
+
+            riders.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+            document.getElementById('totalRiders').textContent = riders.length;
+            document.getElementById('maxParticipations').textContent = Math.max(...riders.map(r => r.total), 0);
+
+            riders.forEach(rider => {
+                const tr = document.createElement('tr');
+                tr.dataset.total = rider.total;
+                tr.dataset.name = rider.name.toLowerCase();
+
+                const tdName = document.createElement('td');
+                tdName.className = 'rider-name';
+                tdName.textContent = rider.name;
+                tr.appendChild(tdName);
+
+                const tdTotal = document.createElement('td');
+                tdTotal.className = 'total';
+                tdTotal.textContent = rider.total;
+                tr.appendChild(tdTotal);
+
+                races.forEach(race => {
+                    const td = document.createElement('td');
+                    td.innerHTML = rider.participations.includes(race.id)
+                        ? '<span class="check">✓</span>'
+                        : '<span class="cross">-</span>';
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterTable() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const minRaces = parseInt(document.getElementById('minRaces').value);
+            document.querySelectorAll('#tableBody tr').forEach(row => {
+                const name = row.dataset.name;
+                const total = parseInt(row.dataset.total);
+                row.style.display = (name.includes(searchTerm) && total >= minRaces) ? '' : 'none';
+            });
+        }
+
+        let currentSort = { column: 1, direction: 'desc' };
+        function sortTable(columnIndex) {
+            const tbody = document.getElementById('tableBody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const headers = document.querySelectorAll('th');
+
+            let direction = (currentSort.column === columnIndex && currentSort.direction === 'desc') ? 'asc' : 'desc';
+            currentSort = { column: columnIndex, direction };
+
+            headers.forEach((h, i) => {
+                h.classList.remove('sort-asc', 'sort-desc');
+                if (i === columnIndex) h.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+            });
+
+            rows.sort((a, b) => {
+                let aVal, bVal;
+                if (columnIndex === 0) {
+                    aVal = a.cells[0].textContent;
+                    bVal = b.cells[0].textContent;
+                    return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                } else if (columnIndex === 1) {
+                    aVal = parseInt(a.cells[1].textContent);
+                    bVal = parseInt(b.cells[1].textContent);
+                } else {
+                    aVal = a.cells[columnIndex].textContent === '✓' ? 1 : 0;
+                    bVal = b.cells[columnIndex].textContent === '✓' ? 1 : 0;
+                }
+                return direction === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { buildHeaders(); buildTable(); });
+    </script>
 </body>
 </html>
