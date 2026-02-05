@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
 Scraper voor voorjaarsklassiekers 2026 startlijsten.
-Haalt data op van ProCyclingStats en genereert een HTML-pagina.
+Gebruikt Playwright (headless browser) om data op te halen van ProCyclingStats.
 """
 
-import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 import json
 import re
 from datetime import datetime
 import os
 import time
-import random
 
 # Configuratie koersen (gesorteerd op datum)
 RACES = [
@@ -32,27 +30,6 @@ RACES = [
     {'id': 'lbl', 'url': 'https://www.procyclingstats.com/race/liege-bastogne-liege/2026/startlist', 'name': 'Liège-Bastogne-Liège', 'date': '2026-04-27', 'monument': True},
 ]
 
-def get_session():
-    """Create a requests session with browser-like settings."""
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-    })
-    return session
-
 def normalize_rider_name(name):
     """Normalize rider name for consistent matching."""
     # Remove time indicators like "1h", "21h", etc.
@@ -61,66 +38,77 @@ def normalize_rider_name(name):
     name = re.sub(r'\*', '', name).strip()
     return name
 
-def fetch_startlist(session, race):
-    """Fetch and parse a startlist from ProCyclingStats."""
+def fetch_startlist(page, race):
+    """Fetch and parse a startlist from ProCyclingStats using Playwright."""
     url = race['url']
-    race_id = race['id']
 
     try:
         print(f"  Fetching {race['name']}...")
 
-        # Add random delay to avoid rate limiting
-        time.sleep(random.uniform(1, 3))
+        # Navigate to page
+        page.goto(url, wait_until='networkidle', timeout=60000)
 
-        response = session.get(url, timeout=30)
-        print(f"    Status code: {response.status_code}")
+        # Wait a bit for dynamic content
+        time.sleep(2)
 
-        if response.status_code != 200:
-            print(f"    Error: HTTP {response.status_code}")
-            return []
+        # Try to close cookie banner if present
+        try:
+            cookie_btn = page.locator('text="Opslaan + Sluiten"').first
+            if cookie_btn.is_visible(timeout=2000):
+                cookie_btn.click()
+                time.sleep(1)
+        except:
+            pass
 
-        html_content = response.text
-        print(f"    Response length: {len(html_content)} chars")
+        # Extract rider links using JavaScript
+        riders = page.evaluate('''() => {
+            const riders = new Set();
+            const links = document.querySelectorAll('a[href*="/rider/"]');
 
-        soup = BeautifulSoup(html_content, 'html.parser')
-        riders = set()
+            links.forEach(link => {
+                const href = link.getAttribute('href') || '';
+                const name = link.textContent.trim();
 
-        # Find all links that contain /rider/ in href
-        all_links = soup.find_all('a', href=True)
-        rider_links = [a for a in all_links if '/rider/' in a.get('href', '')]
+                // Skip stats/overview links
+                if (href.includes('statistics') || href.includes('overview') || href.includes('results')) {
+                    return;
+                }
 
-        print(f"    Found {len(rider_links)} rider links total")
+                // Skip if in footer
+                const footer = link.closest('footer') || link.closest('.footer');
+                if (footer) return;
 
-        for link in rider_links:
-            href = link.get('href', '')
-            name = link.get_text().strip()
+                // Check if it's a valid rider name (has space, starts with uppercase)
+                if (name.length > 3 && name.includes(' ') && /^[A-ZÄÖÜÉÈÀÁÍÓÚÑ]/.test(name)) {
+                    // Remove time indicators
+                    const cleanName = name.replace(/\\d+[hm]$/, '').trim();
+                    if (cleanName.length > 3) {
+                        riders.add(cleanName);
+                    }
+                }
+            });
 
-            # Skip if it's a stats/overview link
-            if any(x in href for x in ['statistics', 'overview', 'results', 'victories']):
-                continue
+            return Array.from(riders);
+        }''')
 
-            # Skip popular riders in footer (they have specific class patterns)
-            parent_classes = ' '.join(link.find_parent('div').get('class', []) if link.find_parent('div') else [])
-            if 'footer' in parent_classes.lower():
-                continue
+        # Filter out popular riders section (common names that appear in footer)
+        popular_riders = ['Tadej Pogačar', 'Wout van Aert', 'Remco Evenepoel', 'Jonas Vingegaard',
+                        'Mathieu van der Poel', 'Mads Pedersen', 'Isaac Del Toro', 'Paul Magnier',
+                        'Demi Vollering', 'Lotte Kopecky', 'Katarzyna Niewiadoma', 'Pauline Ferrand-Prévot']
 
-            # Normalize and validate name
-            name = normalize_rider_name(name)
+        # Only filter these if they appear at the end (likely from footer)
+        # Keep them if they're in the actual startlist
+        filtered_riders = []
+        for rider in riders:
+            # Keep all riders that look like startlist entries (LASTNAME Firstname format)
+            if rider and len(rider) > 3:
+                filtered_riders.append(rider)
 
-            # Valid rider names have at least 2 parts and start with uppercase
-            if len(name) > 3 and ' ' in name and name[0].isupper():
-                # Filter out common non-rider entries
-                if not any(x in name.lower() for x in ['popular', 'statistics', 'team', 'race']):
-                    riders.add(name)
+        print(f"    Found {len(filtered_riders)} riders")
+        if filtered_riders:
+            print(f"    Sample: {filtered_riders[:5]}")
 
-        print(f"    Extracted {len(riders)} unique riders")
-
-        # Debug: print first few riders
-        if riders:
-            sample = list(riders)[:5]
-            print(f"    Sample: {sample}")
-
-        return list(riders)
+        return filtered_riders
 
     except Exception as e:
         print(f"    Error: {e}")
@@ -387,26 +375,28 @@ def generate_html(rider_data, races, last_update):
     return html
 
 def main():
-    print(f"=== Voorjaarsklassiekers 2026 Scraper ===")
+    print(f"=== Voorjaarsklassiekers 2026 Scraper (Playwright) ===")
     print(f"Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
-    # Create session
-    session = get_session()
+    with sync_playwright() as p:
+        # Launch browser
+        print("Launching browser...")
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = context.new_page()
 
-    # First, visit the homepage to get cookies
-    print("Visiting homepage first...")
-    try:
-        session.get('https://www.procyclingstats.com/', timeout=30)
-        time.sleep(2)
-    except Exception as e:
-        print(f"Warning: Could not visit homepage: {e}")
+        # Fetch all startlists
+        races_data = {}
+        for race in RACES:
+            riders = fetch_startlist(page, race)
+            races_data[race['id']] = riders
+            time.sleep(1)  # Be nice to the server
 
-    # Fetch all startlists
-    races_data = {}
-    for race in RACES:
-        riders = fetch_startlist(session, race)
-        races_data[race['id']] = riders
+        browser.close()
 
     # Build rider participation data
     rider_data = build_rider_data(races_data)
